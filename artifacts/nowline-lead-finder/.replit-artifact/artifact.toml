@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Nowline Lead Finder"
+description = "A lead discovery dashboard that searches Google Maps through Apify, enriches business websites, scores outreach potential, and exports ranked prospects for Nowline."
+version = "1.0.0"
+id = "artifacts/nowline-lead-finder"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24986
+
+[services.development]
+run = "pnpm --filter @workspace/nowline-lead-finder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nowline-lead-finder", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nowline-lead-finder/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24986"
+BASE_PATH = "/"

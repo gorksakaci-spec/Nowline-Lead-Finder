@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: leads
+    description: Lead discovery operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /discover:
+    post:
+      operationId: discoverLeads
+      tags: [leads]
+      summary: Discover and score local business leads
+      description: Searches Google Maps through Apify, enriches business websites, and returns ranked outreach prospects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DiscoverLeadsInput"
+      responses:
+        "200":
+          description: Ranked lead results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeadDiscoveryResult"
+        "400":
+          description: Invalid search parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Search service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +66,92 @@ components:
           type: string
       required:
         - status
+    DiscoverLeadsInput:
+      type: object
+      properties:
+        location:
+          type: string
+          minLength: 1
+          maxLength: 200
+          default: United Arab Emirates
+        sectorCount:
+          type: integer
+          minimum: 1
+          maximum: 32
+          default: 12
+        maxPerSector:
+          type: integer
+          minimum: 1
+          maximum: 30
+          default: 8
+        topN:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+    Lead:
+      type: object
+      properties:
+        name:
+          type: string
+        website:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        category:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        rating:
+          type: ["number", "null"]
+        reviewsCount:
+          type: ["integer", "null"]
+        score:
+          type: integer
+        notes:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - website
+        - email
+        - phone
+        - category
+        - address
+        - rating
+        - reviewsCount
+        - score
+        - notes
+    LeadDiscoveryResult:
+      type: object
+      properties:
+        scannedSectors:
+          type: array
+          items:
+            type: string
+        totalFound:
+          type: integer
+        returned:
+          type: integer
+        leads:
+          type: array
+          items:
+            $ref: "#/components/schemas/Lead"
+      required:
+        - scannedSectors
+        - totalFound
+        - returned
+        - leads
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: ["string", "null"]
+      required:
+        - error
 
