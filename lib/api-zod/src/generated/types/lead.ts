@@ -5,8 +5,10 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { LeadPlatform } from './leadPlatform';
 
 export interface Lead {
+  platform: LeadPlatform;
   name: string;
   /** @nullable */
   website: string | null;
@@ -22,6 +24,10 @@ export interface Lead {
   rating: number | null;
   /** @nullable */
   reviewsCount: number | null;
+  /** @nullable */
+  followersCount: number | null;
+  /** @nullable */
+  profileUrl: string | null;
   score: number;
   notes: string[];
 }

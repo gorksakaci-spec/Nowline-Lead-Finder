@@ -33,20 +33,23 @@ export const discoverLeadsBodyMaxPerSectorMax = 30;
 export const discoverLeadsBodyTopNDefault = 50;
 export const discoverLeadsBodyTopNMax = 200;
 
-
+export const discoverLeadsBodySourceDefault = `maps`;
 
 export const DiscoverLeadsBody = zod.object({
   "location": zod.string().min(1).max(discoverLeadsBodyLocationMax).default(discoverLeadsBodyLocationDefault),
   "sectorCount": zod.number().int().min(1).max(discoverLeadsBodySectorCountMax).default(discoverLeadsBodySectorCountDefault),
   "maxPerSector": zod.number().int().min(1).max(discoverLeadsBodyMaxPerSectorMax).default(discoverLeadsBodyMaxPerSectorDefault),
-  "topN": zod.number().int().min(1).max(discoverLeadsBodyTopNMax).default(discoverLeadsBodyTopNDefault)
+  "topN": zod.number().int().min(1).max(discoverLeadsBodyTopNMax).default(discoverLeadsBodyTopNDefault),
+  "source": zod.enum(['maps', 'instagram', 'both']).default(discoverLeadsBodySourceDefault)
 })
 
 export const DiscoverLeadsResponse = zod.object({
+  "source": zod.enum(['maps', 'instagram', 'both']),
   "scannedSectors": zod.array(zod.string()),
   "totalFound": zod.number().int(),
   "returned": zod.number().int(),
   "leads": zod.array(zod.object({
+  "platform": zod.enum(['maps', 'instagram']),
   "name": zod.string(),
   "website": zod.string().nullable(),
   "email": zod.string().nullable(),
@@ -55,6 +58,8 @@ export const DiscoverLeadsResponse = zod.object({
   "address": zod.string().nullable(),
   "rating": zod.number().nullable(),
   "reviewsCount": zod.number().int().nullable(),
+  "followersCount": zod.number().int().nullable(),
+  "profileUrl": zod.string().nullable(),
   "score": zod.number().int(),
   "notes": zod.array(zod.string())
 }))

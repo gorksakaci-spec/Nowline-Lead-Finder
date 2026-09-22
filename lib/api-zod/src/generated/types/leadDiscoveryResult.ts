@@ -6,8 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Lead } from './lead';
+import type { LeadDiscoveryResultSource } from './leadDiscoveryResultSource';
 
 export interface LeadDiscoveryResult {
+  source: LeadDiscoveryResultSource;
   scannedSectors: string[];
   totalFound: number;
   returned: number;

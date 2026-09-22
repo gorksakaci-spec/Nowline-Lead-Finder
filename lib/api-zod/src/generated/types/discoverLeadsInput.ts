@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { DiscoverLeadsInputSource } from './discoverLeadsInputSource';
 
 export interface DiscoverLeadsInput {
   /**
@@ -27,4 +28,5 @@ export interface DiscoverLeadsInput {
      * @maximum 200
      */
   topN?: number;
+  source?: DiscoverLeadsInputSource;
 }

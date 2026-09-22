@@ -7,7 +7,10 @@
  */
 
 export * from './discoverLeadsInput';
+export * from './discoverLeadsInputSource';
 export * from './errorResponse';
 export * from './healthStatus';
 export * from './lead';
 export * from './leadDiscoveryResult';
+export * from './leadDiscoveryResultSource';
+export * from './leadPlatform';

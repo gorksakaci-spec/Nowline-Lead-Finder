@@ -6,6 +6,8 @@ import { DiscoverLeadsBody, DiscoverLeadsResponse } from "@workspace/api-zod";
 const router: IRouter = Router();
 
 const GOOGLE_MAPS_ACTOR = "compass~crawler-google-places";
+const INSTAGRAM_SEARCH_ACTOR = "apify~instagram-search-scraper";
+const INSTAGRAM_PROFILE_ACTOR = "apify~instagram-profile-scraper";
 const SECTOR_UNIVERSE = [
   "beauty salon",
   "hair salon",
@@ -67,16 +69,33 @@ type Place = {
   reviewsCount?: number;
 };
 
+type Lead = {
+  platform: "maps" | "instagram";
+  name: string;
+  website: string | null;
+  email: string | null;
+  phone: string | null;
+  category: string | null;
+  address: string | null;
+  city: string | null;
+  rating: number | null;
+  reviewsCount: number | null;
+  followersCount: number | null;
+  isBusinessAccount?: boolean;
+  bioEmail?: string | null;
+  profileUrl: string | null;
+};
+
 type WebsiteInfo = {
   email: string | null;
   hasAutomationSignal: boolean;
 };
 
-function scoreLead(place: Place, websiteInfo: WebsiteInfo | null) {
+function scoreLead(lead: Lead, websiteInfo: WebsiteInfo | null) {
   let score = 45;
   const notes: string[] = [];
 
-  if (!place.website) {
+  if (!lead.website) {
     score += 15;
     notes.push("Website yok — WhatsApp/Instagram gibi kanallara daha bağımlı");
   } else if (websiteInfo) {
@@ -93,22 +112,37 @@ function scoreLead(place: Place, websiteInfo: WebsiteInfo | null) {
     }
   }
 
-  const city = (place.city ?? place.address ?? "").toLowerCase();
+  const city = (lead.city ?? lead.address ?? "").toLowerCase();
   if (HUB_CITIES.some((hub) => city.includes(hub))) {
     score += 10;
     notes.push("Büyük iş merkezi (Dubai/Abu Dhabi)");
   }
 
-  const reviews = place.reviewsCount ?? 0;
-  if (reviews >= 15 && reviews <= 600) {
-    score += 10;
-    notes.push("Aktif ama kurumsal dev olmayan işletme");
-  } else if (reviews > 600) {
-    score -= 5;
-    notes.push("Çok büyük/kurumsal işletme olabilir");
+  if (lead.platform === "instagram") {
+    const followers = lead.followersCount ?? 0;
+    if (followers >= 500 && followers <= 50_000) {
+      score += 10;
+      notes.push("Aktif ama mega olmayan Instagram profili");
+    } else if (followers > 50_000) {
+      score -= 5;
+      notes.push("Çok büyük/kurumsal Instagram hesabı olabilir");
+    }
+    if (lead.isBusinessAccount) {
+      score += 5;
+      notes.push("Instagram Business hesabı");
+    }
+  } else {
+    const reviews = lead.reviewsCount ?? 0;
+    if (reviews >= 15 && reviews <= 600) {
+      score += 10;
+      notes.push("Aktif ama kurumsal dev olmayan işletme");
+    } else if (reviews > 600) {
+      score -= 5;
+      notes.push("Çok büyük/kurumsal işletme olabilir");
+    }
   }
 
-  if (place.phone) {
+  if (lead.phone) {
     score += 5;
     notes.push("Telefon numarası mevcut");
   }
@@ -186,6 +220,64 @@ async function extractWebsiteInfo(rawUrl: string): Promise<WebsiteInfo> {
   }
 }
 
+function extractEmailFromText(text: string | undefined) {
+  if (!text) return null;
+  return text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] ?? null;
+}
+
+function normalizeMapsPlace(place: Place): Lead {
+  return {
+    platform: "maps",
+    name: place.title || "Bilinmiyor",
+    website: place.website || null,
+    email: null,
+    phone: place.phone || null,
+    category: place.categoryName || null,
+    address: place.address || null,
+    city: place.city || null,
+    rating: place.totalScore ?? null,
+    reviewsCount: place.reviewsCount ?? null,
+    followersCount: null,
+    profileUrl: null,
+  };
+}
+
+function normalizeInstagramProfile(profile: Record<string, unknown>): Lead {
+  const username = typeof profile.username === "string" ? profile.username : null;
+  const externalUrl =
+    typeof profile.externalUrl === "string"
+      ? profile.externalUrl
+      : typeof profile.website === "string"
+        ? profile.website
+        : null;
+  return {
+    platform: "instagram",
+    name:
+      (typeof profile.fullName === "string" && profile.fullName) ||
+      username ||
+      "Bilinmiyor",
+    website: externalUrl,
+    email: null,
+    phone: null,
+    category: "Instagram profili",
+    address: null,
+    city: null,
+    rating: null,
+    reviewsCount: null,
+    followersCount:
+      typeof profile.followersCount === "number" ? profile.followersCount : 0,
+    isBusinessAccount: profile.isBusinessAccount === true,
+    bioEmail: extractEmailFromText(
+      typeof profile.biography === "string"
+        ? profile.biography
+        : typeof profile.bio === "string"
+          ? profile.bio
+          : undefined,
+    ),
+    profileUrl: username ? `https://instagram.com/${username}` : null,
+  };
+}
+
 async function runApifySearch(
   searchStrings: string[],
   location: string,
@@ -211,7 +303,49 @@ async function runApifySearch(
       maxContentLength: 10_000_000,
     },
   );
-  return Array.isArray(response.data) ? response.data : [];
+  return Array.isArray(response.data)
+    ? response.data.map((place) => normalizeMapsPlace(place))
+    : [];
+}
+
+async function runInstagramSearch(
+  searchTerms: string[],
+  location: string,
+  maxPerTerm: number,
+) {
+  const token = process.env.APIFY_API_TOKEN;
+  if (!token) throw new Error("APIFY_API_TOKEN is not configured");
+
+  const searchResponse = await axios.post<unknown[]>(
+    `https://api.apify.com/v2/acts/${INSTAGRAM_SEARCH_ACTOR}/run-sync-get-dataset-items`,
+    {
+      search: searchTerms.map((term) => `${term} ${location}`),
+      searchType: "user",
+      searchLimit: maxPerTerm,
+    },
+    { params: { token }, timeout: 1000 * 60 * 8, maxContentLength: 10_000_000 },
+  );
+  const usernames = [
+    ...new Set(
+      (Array.isArray(searchResponse.data) ? searchResponse.data : [])
+        .map((profile) =>
+          profile && typeof profile === "object" && "username" in profile
+            ? profile.username
+            : null,
+        )
+        .filter((username): username is string => typeof username === "string"),
+    ),
+  ];
+  if (!usernames.length) return [];
+
+  const profileResponse = await axios.post<unknown[]>(
+    `https://api.apify.com/v2/acts/${INSTAGRAM_PROFILE_ACTOR}/run-sync-get-dataset-items`,
+    { usernames },
+    { params: { token }, timeout: 1000 * 60 * 8, maxContentLength: 10_000_000 },
+  );
+  return (Array.isArray(profileResponse.data) ? profileResponse.data : [])
+    .filter((profile): profile is Record<string, unknown> => typeof profile === "object" && profile !== null)
+    .map(normalizeInstagramProfile);
 }
 
 router.post("/discover", async (req, res) => {
@@ -224,17 +358,21 @@ router.post("/discover", async (req, res) => {
   }
 
   try {
-    const { location, sectorCount, maxPerSector, topN } = parsed.data;
+    const { location, sectorCount, maxPerSector, topN, source } = parsed.data;
     const chosenSectors = [...SECTOR_UNIVERSE]
       .sort(() => Math.random() - 0.5)
       .slice(0, Math.min(sectorCount, SECTOR_UNIVERSE.length));
-    const places = await runApifySearch(
-      chosenSectors.map((sector) => `${sector} in ${location}`),
-      location,
-      maxPerSector,
-    );
+    const searchStrings = chosenSectors.map((sector) => `${sector} in ${location}`);
+    const leads: Lead[] = [];
+    if (source === "maps" || source === "both") {
+      leads.push(...(await runApifySearch(searchStrings, location, maxPerSector)));
+    }
+    if (source === "instagram" || source === "both") {
+      leads.push(...(await runInstagramSearch(chosenSectors, location, maxPerSector)));
+    }
 
     const enriched: Array<{
+      platform: "maps" | "instagram";
       name: string;
       website: string | null;
       email: string | null;
@@ -243,27 +381,32 @@ router.post("/discover", async (req, res) => {
       address: string | null;
       rating: number | null;
       reviewsCount: number | null;
+      followersCount: number | null;
+      profileUrl: string | null;
       score: number;
       notes: string[];
     }> = [];
 
-    for (let index = 0; index < places.length; index += 5) {
-      const batch = places.slice(index, index + 5);
+    for (let index = 0; index < leads.length; index += 5) {
+      const batch = leads.slice(index, index + 5);
       const results = await Promise.all(
-        batch.map(async (place) => {
-          const websiteInfo = place.website
-            ? await extractWebsiteInfo(place.website)
+        batch.map(async (lead) => {
+          const websiteInfo = lead.website
+            ? await extractWebsiteInfo(lead.website)
             : null;
-          const { score, notes } = scoreLead(place, websiteInfo);
+          const { score, notes } = scoreLead(lead, websiteInfo);
           return {
-            name: place.title || "Bilinmiyor",
-            website: place.website || null,
-            email: websiteInfo?.email || null,
-            phone: place.phone || null,
-            category: place.categoryName || null,
-            address: place.address || null,
-            rating: place.totalScore ?? null,
-            reviewsCount: place.reviewsCount ?? null,
+            platform: lead.platform,
+            name: lead.name,
+            website: lead.website,
+            email: websiteInfo?.email || lead.bioEmail || null,
+            phone: lead.phone,
+            category: lead.category,
+            address: lead.address,
+            rating: lead.rating,
+            reviewsCount: lead.reviewsCount,
+            followersCount: lead.followersCount,
+            profileUrl: lead.profileUrl,
             score,
             notes,
           };
@@ -274,7 +417,7 @@ router.post("/discover", async (req, res) => {
 
     const seen = new Set<string>();
     const deduped = enriched.filter((lead) => {
-      const key = `${lead.name}|${lead.address}`;
+      const key = `${lead.platform}|${lead.name}|${lead.address || lead.profileUrl}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -282,6 +425,7 @@ router.post("/discover", async (req, res) => {
     deduped.sort((a, b) => b.score - a.score);
 
     const output = DiscoverLeadsResponse.parse({
+      source,
       scannedSectors: chosenSectors,
       totalFound: deduped.length,
       returned: Math.min(topN, deduped.length),

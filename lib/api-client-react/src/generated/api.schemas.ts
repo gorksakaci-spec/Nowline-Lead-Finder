@@ -9,6 +9,15 @@ export interface HealthStatus {
   status: string;
 }
 
+export type DiscoverLeadsInputSource = typeof DiscoverLeadsInputSource[keyof typeof DiscoverLeadsInputSource];
+
+
+export const DiscoverLeadsInputSource = {
+  maps: 'maps',
+  instagram: 'instagram',
+  both: 'both',
+} as const;
+
 export interface DiscoverLeadsInput {
   /**
      * @minLength 1
@@ -30,9 +39,19 @@ export interface DiscoverLeadsInput {
      * @maximum 200
      */
   topN?: number;
+  source?: DiscoverLeadsInputSource;
 }
 
+export type LeadPlatform = typeof LeadPlatform[keyof typeof LeadPlatform];
+
+
+export const LeadPlatform = {
+  maps: 'maps',
+  instagram: 'instagram',
+} as const;
+
 export interface Lead {
+  platform: LeadPlatform;
   name: string;
   /** @nullable */
   website: string | null;
@@ -48,11 +67,25 @@ export interface Lead {
   rating: number | null;
   /** @nullable */
   reviewsCount: number | null;
+  /** @nullable */
+  followersCount: number | null;
+  /** @nullable */
+  profileUrl: string | null;
   score: number;
   notes: string[];
 }
 
+export type LeadDiscoveryResultSource = typeof LeadDiscoveryResultSource[keyof typeof LeadDiscoveryResultSource];
+
+
+export const LeadDiscoveryResultSource = {
+  maps: 'maps',
+  instagram: 'instagram',
+  both: 'both',
+} as const;
+
 export interface LeadDiscoveryResult {
+  source: LeadDiscoveryResultSource;
   scannedSectors: string[];
   totalFound: number;
   returned: number;

@@ -16,6 +16,7 @@ import {
   Filter,
   Gauge,
   Globe2,
+  Instagram,
   Layers3,
   LoaderCircle,
   Mail,
@@ -28,6 +29,7 @@ import {
   Sparkles,
   Star,
   Target,
+  Users,
   X,
 } from 'lucide-react';
 import {
@@ -51,6 +53,7 @@ const searchSchema = z.object({
   sectorCount: z.coerce.number().min(1).max(32),
   maxPerSector: z.coerce.number().min(1).max(30),
   topN: z.coerce.number().min(1).max(200),
+  source: z.enum(['maps', 'instagram', 'both']),
 });
 
 type SearchFormValues = z.infer<typeof searchSchema>;
@@ -66,17 +69,20 @@ function safeUrl(url: string | null) {
 }
 
 function downloadCsv(leads: Lead[]) {
-  const headers = ['Name', 'Category', 'Score', 'Rating', 'Reviews', 'Email', 'Phone', 'Website', 'Address', 'Notes'];
+  const headers = ['Source', 'Name', 'Category', 'Score', 'Rating', 'Reviews', 'Followers', 'Email', 'Phone', 'Website', 'Profile', 'Address', 'Notes'];
   const escape = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
   const rows = leads.map((lead) => [
+    lead.platform,
     lead.name,
     lead.category,
     lead.score,
     lead.rating,
     lead.reviewsCount,
+    lead.followersCount,
     lead.email,
     lead.phone,
     lead.website,
+    lead.profileUrl,
     lead.address,
     lead.notes.join(' · '),
   ].map(escape).join(','));
@@ -170,18 +176,29 @@ function SearchForm({ onSearch, pending }: { onSearch: (values: SearchFormValues
       sectorCount: 12,
       maxPerSector: 8,
       topN: 50,
+      source: 'maps',
     },
   });
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSearch)} className="relative z-10">
-        <div className="grid gap-3 lg:grid-cols-[minmax(240px,1.7fr)_repeat(3,minmax(108px,.65fr))_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.45fr)_minmax(132px,.8fr)_repeat(3,minmax(108px,.65fr))_auto]">
           <label className="group block">
             <span className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.13em] text-[hsl(var(--muted-foreground))]"><MapPin className="h-3 w-3" /> Search location</span>
             <div className="flex h-12 items-center rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] px-3 transition focus-within:border-[hsl(var(--primary))] focus-within:ring-4 focus-within:ring-[hsl(var(--primary)/.13)]">
               <input {...form.register('location')} data-testid="input-location" aria-label="Search location" className="w-full bg-transparent text-sm font-semibold text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground))]" placeholder="City, region, or postal code" />
             </div>
             {form.formState.errors.location && <span className="mt-1 block text-[10px] text-[hsl(var(--destructive))]">{form.formState.errors.location.message}</span>}
+          </label>
+          <label className="block">
+            <span className="mb-2 block font-mono text-[10px] uppercase tracking-[0.13em] text-[hsl(var(--muted-foreground))]">Source</span>
+            <div className="flex h-12 items-center rounded-xl border border-[hsl(var(--input))] bg-[hsl(var(--card))] px-3 transition focus-within:border-[hsl(var(--primary))] focus-within:ring-4 focus-within:ring-[hsl(var(--primary)/.13)]">
+              <select {...form.register('source')} data-testid="select-source" aria-label="Search source" className="w-full bg-transparent text-sm font-semibold text-[hsl(var(--foreground))] outline-none">
+                <option value="maps">Google Maps</option>
+                <option value="instagram">Instagram</option>
+                <option value="both">Maps + Instagram</option>
+              </select>
+            </div>
           </label>
           {[
             { name: 'sectorCount' as const, label: 'Sectors', hint: '1–32' },
@@ -223,26 +240,28 @@ function ScanSkeleton() {
 }
 
 function LeadCard({ lead, index }: { lead: Lead; index: number }) {
-  const website = safeUrl(lead.website);
+  const website = safeUrl(lead.website) ?? safeUrl(lead.profileUrl);
+  const isInstagram = lead.platform === 'instagram';
   const scoreTone = lead.score >= 80 ? 'bg-[hsl(167_45%_88%)] text-[hsl(178_37%_25%)]' : lead.score >= 60 ? 'bg-[hsl(43_95%_56%/.17)] text-[hsl(35_75%_34%)]' : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]';
   return (
     <article className="group rounded-2xl border border-[hsl(var(--card-border))] bg-[hsl(var(--card))] p-4 shadow-[var(--shadow-sm)] transition duration-200 hover:-translate-y-0.5 hover:border-[hsl(43_95%_56%/.55)] hover:shadow-[var(--shadow)]" data-testid={`card-lead-${index}`}>
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--secondary))] font-mono text-xs font-medium text-[hsl(var(--primary))]">{lead.name.slice(0, 1).toUpperCase()}</div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-sm font-extrabold tracking-[-0.02em] text-[hsl(var(--foreground))]" data-testid={`text-lead-name-${index}`}>{lead.name}</h3>
             {lead.category && <span className="rounded-md bg-[hsl(var(--muted))] px-1.5 py-1 font-mono text-[9px] uppercase tracking-[0.06em] text-[hsl(var(--muted-foreground))]">{lead.category}</span>}
+             <span className="flex items-center gap-1 rounded-md border border-[hsl(var(--border))] px-1.5 py-1 font-mono text-[9px] uppercase tracking-[0.06em] text-[hsl(var(--muted-foreground))]">{isInstagram ? <Instagram className="h-2.5 w-2.5" /> : <Globe2 className="h-2.5 w-2.5" />}{isInstagram ? 'Instagram' : 'Google Maps'}</span>
           </div>
           <div className="mt-1 flex items-start gap-1.5 text-[11px] leading-4 text-[hsl(var(--muted-foreground))]"><MapPin className="mt-0.5 h-3 w-3 shrink-0" /> <span className="line-clamp-1">{lead.address || 'Address not available'}</span></div>
         </div>
         <div className={`flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 font-mono text-xs font-medium ${scoreTone}`} data-testid={`text-lead-score-${index}`}><span>{lead.score}</span><span className="text-[9px] opacity-70">/100</span></div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[hsl(var(--border)/.7)] pt-3 text-[11px] text-[hsl(var(--muted-foreground))]">
-        <span className="flex items-center gap-1.5"><Star className="h-3 w-3 fill-[hsl(var(--primary))] text-[hsl(var(--primary))]" /> {lead.rating ?? '—'} <span className="opacity-65">({formatCount(lead.reviewsCount ?? 0)})</span></span>
+         {isInstagram ? <span className="flex items-center gap-1.5"><Users className="h-3 w-3 text-[hsl(var(--primary))]" /> {formatCount(lead.followersCount ?? 0)} <span className="opacity-65">followers</span></span> : <span className="flex items-center gap-1.5"><Star className="h-3 w-3 fill-[hsl(var(--primary))] text-[hsl(var(--primary))]" /> {lead.rating ?? '—'} <span className="opacity-65">({formatCount(lead.reviewsCount ?? 0)})</span></span>}
         {lead.email ? <a href={`mailto:${lead.email}`} data-testid={`link-email-${index}`} className="flex items-center gap-1.5 transition hover:text-[hsl(var(--foreground))]"><Mail className="h-3 w-3" /> Email</a> : <span className="flex items-center gap-1.5 opacity-40"><Mail className="h-3 w-3" /> No email</span>}
         {lead.phone ? <a href={`tel:${lead.phone}`} data-testid={`link-phone-${index}`} className="flex items-center gap-1.5 transition hover:text-[hsl(var(--foreground))]"><Phone className="h-3 w-3" /> {lead.phone}</a> : null}
-        {website ? <a href={website} target="_blank" rel="noreferrer" data-testid={`link-website-${index}`} className="ml-auto flex items-center gap-1 font-semibold text-[hsl(226_52%_39%)] transition hover:text-[hsl(178_37%_28%)]">Visit site <ExternalLink className="h-3 w-3" /></a> : null}
+         {website ? <a href={website} target="_blank" rel="noreferrer" data-testid={`link-website-${index}`} className="ml-auto flex items-center gap-1 font-semibold text-[hsl(226_52%_39%)] transition hover:text-[hsl(178_37%_28%)]">{isInstagram && !lead.website ? 'Open Instagram' : 'Visit site'} <ExternalLink className="h-3 w-3" /></a> : null}
       </div>
       {lead.notes.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{lead.notes.slice(0, 3).map((note, noteIndex) => <span key={`${note}-${noteIndex}`} className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1 text-[10px] text-[hsl(var(--muted-foreground))]">{note}</span>)}</div>}
     </article>
@@ -256,6 +275,7 @@ function Home() {
   const [category, setCategory] = useState('all');
   const [sort, setSort] = useState<SortKey>('score');
   const [minScore, setMinScore] = useState(0);
+  const [lastSearch, setLastSearch] = useState<SearchFormValues | null>(null);
   const result = discover.data;
   const categories = useMemo(() => Array.from(new Set((result?.leads ?? []).map((lead) => lead.category).filter(Boolean) as string[])).sort(), [result]);
   const filteredLeads = useMemo(() => {
@@ -266,6 +286,7 @@ function Home() {
     return [...leads].sort((a, b) => (b[sort] ?? 0) - (a[sort] ?? 0));
   }, [category, minScore, query, result, sort]);
   const runSearch = (values: SearchFormValues) => {
+    setLastSearch(values);
     discover.mutate({ data: values });
   };
   const resetWorkspace = () => {
@@ -274,6 +295,7 @@ function Home() {
     setCategory('all');
     setMinScore(0);
     setSort('score');
+    setLastSearch(null);
   };
   const healthOk = health.data?.status?.toLowerCase() === 'ok' || health.data?.status?.toLowerCase() === 'healthy';
   const errorMessage = discover.error instanceof Error ? discover.error.message : 'The signal scan could not be completed.';
@@ -306,7 +328,7 @@ function Home() {
           </section>
 
           {discover.isPending ? <section className="reveal-up-delay"><div className="mb-5 grid gap-3 sm:grid-cols-3"><MetricTile label="Scope" value="…" detail="Preparing sectors" accent="amber" icon={Layers3} /><MetricTile label="Found" value="…" detail="Scanning sources" accent="teal" icon={Globe2} /><MetricTile label="Quality" value="…" detail="Ranking signals" accent="blue" icon={Gauge} /></div><ScanSkeleton /></section> :
-            discover.error ? <section className="reveal-up rounded-2xl border border-[hsl(var(--destructive)/.27)] bg-[hsl(var(--destructive)/.06)] p-8 text-center" data-testid="error-discovery"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[hsl(var(--destructive)/.12)] text-[hsl(var(--destructive))]"><CircleAlert className="h-5 w-5" /></div><h2 className="mt-4 text-lg font-extrabold">The scan missed its signal.</h2><p className="mx-auto mt-2 max-w-md text-sm text-[hsl(var(--muted-foreground))]">{errorMessage}</p><div className="mt-5 flex justify-center gap-2"><button type="button" onClick={() => discover.reset()} data-testid="button-dismiss-error" className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2.5 text-sm font-semibold transition hover:bg-[hsl(var(--muted))]">Clear</button><button type="button" onClick={() => { const values = document.querySelector<HTMLInputElement>('[data-testid="input-location"]')?.value; if (values) discover.mutate({ data: { location: values, sectorCount: 4, maxPerSector: 12, topN: 25 } }); }} data-testid="button-retry-discovery" className="flex items-center gap-2 rounded-xl bg-[hsl(var(--secondary))] px-4 py-2.5 text-sm font-bold text-[hsl(var(--secondary-foreground))]"><RotateCcw className="h-3.5 w-3.5" /> Retry scan</button></div></section> :
+             discover.error ? <section className="reveal-up rounded-2xl border border-[hsl(var(--destructive)/.27)] bg-[hsl(var(--destructive)/.06)] p-8 text-center" data-testid="error-discovery"><div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[hsl(var(--destructive)/.12)] text-[hsl(var(--destructive))]"><CircleAlert className="h-5 w-5" /></div><h2 className="mt-4 text-lg font-extrabold">The scan missed its signal.</h2><p className="mx-auto mt-2 max-w-md text-sm text-[hsl(var(--muted-foreground))]">{errorMessage}</p><div className="mt-5 flex justify-center gap-2"><button type="button" onClick={() => discover.reset()} data-testid="button-dismiss-error" className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2.5 text-sm font-semibold transition hover:bg-[hsl(var(--muted))]">Clear</button><button type="button" onClick={() => { if (lastSearch) discover.mutate({ data: lastSearch }); }} data-testid="button-retry-discovery" className="flex items-center gap-2 rounded-xl bg-[hsl(var(--secondary))] px-4 py-2.5 text-sm font-bold text-[hsl(var(--secondary-foreground))]"><RotateCcw className="h-3.5 w-3.5" /> Retry scan</button></div></section> :
             result ? <section className="reveal-up-delay">
               <div className="mb-6 grid gap-3 sm:grid-cols-3">
                 <MetricTile label="Scope" value={`${result.scannedSectors.length}`} detail={`${result.scannedSectors.join(' · ') || 'Sectors scanned'}`} accent="amber" icon={Layers3} />

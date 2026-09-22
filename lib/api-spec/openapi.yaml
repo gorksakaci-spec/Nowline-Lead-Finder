@@ -89,9 +89,16 @@ components:
           minimum: 1
           maximum: 200
           default: 50
+        source:
+          type: string
+          enum: [maps, instagram, both]
+          default: maps
     Lead:
       type: object
       properties:
+        platform:
+          type: string
+          enum: [maps, instagram]
         name:
           type: string
         website:
@@ -108,6 +115,10 @@ components:
           type: ["number", "null"]
         reviewsCount:
           type: ["integer", "null"]
+        followersCount:
+          type: ["integer", "null"]
+        profileUrl:
+          type: ["string", "null"]
         score:
           type: integer
         notes:
@@ -115,6 +126,7 @@ components:
           items:
             type: string
       required:
+        - platform
         - name
         - website
         - email
@@ -123,11 +135,16 @@ components:
         - address
         - rating
         - reviewsCount
+        - followersCount
+        - profileUrl
         - score
         - notes
     LeadDiscoveryResult:
       type: object
       properties:
+        source:
+          type: string
+          enum: [maps, instagram, both]
         scannedSectors:
           type: array
           items:
@@ -141,6 +158,7 @@ components:
           items:
             $ref: "#/components/schemas/Lead"
       required:
+        - source
         - scannedSectors
         - totalFound
         - returned
